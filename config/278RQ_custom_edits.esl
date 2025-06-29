@@ -1,0 +1,76 @@
+
+# Custom ESL Schema Overlay for X12N 278 Request
+# ASC X12N 005010X217 - CMS esMD X12N 278 Companion Guide AR2024.10.0
+# Generated: June 29, 2025 • 09:20 AM
+
+form: HIPAA
+version: '005010X217'
+imports: ['/x12/005010X217/basedefs.esl']
+
+structures:
+  - idRef: '278'
+    name: 'Health Care Services Review Request (Custom Overlay)'
+    purpose: 'Prior Authorization Request - Custom Configuration'
+    
+    heading:
+      - { idRef: 'BHT', position: '0200', usage: M, maxUse: 1,
+          elements: [
+            { position: 1, usage: M, name: 'Hierarchical Structure Code' },
+            { position: 2, usage: M, name: 'Transaction Set Purpose Code' },
+            { position: 3, usage: O, name: 'Reference Identification' },
+            { position: 4, usage: O, name: 'Date' },
+            { position: 5, usage: O, name: 'Time' },
+            { position: 6, usage: O, name: 'Transaction Type Code' }
+          ]
+        }
+    
+    detail:
+      - groupIdRef: '2000A_Loop'
+        name: 'Utilization Management Organization Level'
+        usage: M
+        maxUse: 1
+        items:
+          - { idRef: 'HL', position: '0100', usage: M }
+          - { idRef: 'NM1', position: '1000', usage: M }
+      
+      - groupIdRef: '2000B_Loop'
+        name: 'Information Source Level'
+        usage: M
+        maxUse: 1
+        items:
+          - { idRef: 'HL', position: '0100', usage: M }
+          - { idRef: 'NM1', position: '1000', usage: M }
+          - { idRef: 'N3', position: '2000', usage: M }
+          - { idRef: 'N4', position: '2100', usage: M }
+          - { idRef: 'PER', position: '3000', usage: O }
+      
+      - groupIdRef: '2000C_Loop'
+        name: 'Patient Level'
+        usage: M
+        maxUse: 1
+        items:
+          - { idRef: 'HL', position: '0100', usage: M }
+          - { idRef: 'NM1', position: '1000', usage: M }
+          - { idRef: 'DMG', position: '1200', usage: M }
+          - { idRef: 'INS', position: '1500', usage: U }
+      
+      - groupIdRef: '2000E_Loop'
+        name: 'Service Level'
+        usage: M
+        maxUse: 1
+        items:
+          - { idRef: 'HL', position: '0100', usage: M }
+          - { idRef: 'UM', position: '0200', usage: M }
+          - { idRef: 'DTP', position: '0765', usage: M }
+          - { groupIdRef: '2010EA_Loop', usage: M }
+          - { idRef: 'SV3', position: '2400', usage: U }
+          - { idRef: 'TOO', position: '2500', usage: U }
+
+# Custom overlay modifications applied:
+# - All HL segments: Mandatory
+# - BHT elements 3,4,5: Optional
+# - N3 & N4 in 2010B Loop: Mandatory
+# - DMG in 2010C: Mandatory
+# - INS segment: Unused
+# - SV3/TOO segments: Unused
+# - DTP_EventDate & 2010EA Loop: Mandatory

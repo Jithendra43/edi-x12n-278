@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,7 +29,8 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
 
     setIsValidating(true);
     try {
-      const results = await mockValidateEDI(parsedData);
+      // Use custom schema if available
+      const results = await mockValidateEDI(parsedData, !!customSchema);
       onValidationComplete(results);
       
       const errorCount = results.filter(r => r.type === 'error').length;
@@ -38,7 +38,7 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
       
       toast({
         title: "Validation complete",
-        description: `Found ${errorCount} error(s) and ${warningCount} warning(s)`,
+        description: `Found ${errorCount} error(s) and ${warningCount} warning(s)${customSchema ? ' using custom ESL overlay' : ''}`,
       });
     } catch (error) {
       toast({
@@ -87,13 +87,13 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
         <CardHeader>
           <CardTitle className="text-center flex items-center justify-center gap-2">
             <Hexagon className="w-5 h-5" />
-            SNIP Level Validation
+            SNIP Level Validation - ASC X12N 005010X217
           </CardTitle>
           <CardDescription className="text-center">
-            Comprehensive validation across all 7 SNIP levels for HIPAA compliance
+            Comprehensive validation using CMS esMD X12N 278 Companion Guide AR2024.10.0
             {customSchema && (
               <span className="block mt-2 text-blue-600 font-medium">
-                Using custom schema: {customSchema.transactionType} {customSchema.version}
+                Using custom ESL overlay: {customSchema.transactionType} {customSchema.version}
               </span>
             )}
           </CardDescription>
@@ -111,6 +111,7 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
                   <p className="font-medium">Ready for validation</p>
                   <p className="text-sm text-gray-600">
                     {parsedData.transactionCount} transaction(s) to validate
+                    {customSchema && <span className="text-blue-600"> with custom ESL overlay</span>}
                   </p>
                 </div>
                 <Button 
@@ -118,7 +119,7 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
                   disabled={isValidating}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
-                  {isValidating ? 'Validating...' : 'Run Validation'}
+                  {isValidating ? 'Validating...' : 'Run SNIP Validation'}
                 </Button>
               </div>
               
@@ -126,7 +127,9 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 p-4 bg-blue-50 rounded">
                     <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="text-blue-700">Running SNIP Level 1-7 validation...</span>
+                    <span className="text-blue-700">
+                      Running SNIP Level 1-7 validation with {customSchema ? 'custom ESL overlay' : 'default schema'}...
+                    </span>
                   </div>
                   <div className="grid grid-cols-7 gap-2">
                     {[1, 2, 3, 4, 5, 6, 7].map(level => {
