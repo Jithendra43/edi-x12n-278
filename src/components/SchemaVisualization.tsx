@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Search, FileText, Folder, FolderOpen } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Search, FileText, Folder, FolderOpen, CheckCircle } from 'lucide-react';
 import { EDIFile, ParsedEDI } from '@/pages/Index';
 import { mockParseEDI } from '@/utils/mockApi';
 import { useToast } from '@/hooks/use-toast';
@@ -349,11 +350,11 @@ const SchemaVisualization: React.FC<SchemaVisualizationProps> = ({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="text-center flex items-center justify-center gap-2">
             <Search className="w-5 h-5" />
             Parse & Analyze EDI Structure
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-center">
             Parse the uploaded EDI file and visualize its structure against the X12N 278 schema
           </CardDescription>
         </CardHeader>
@@ -385,27 +386,84 @@ const SchemaVisualization: React.FC<SchemaVisualizationProps> = ({
                   <span className="text-blue-700">Analyzing EDI structure...</span>
                 </div>
               )}
-              
-              {parsedData && (
-                <div className="mt-6 p-4 bg-green-50 rounded border border-green-200">
-                  <h3 className="font-medium text-green-800 mb-2">Parsing Results</h3>
-                  <div className="text-sm text-green-700 space-y-1">
-                    <p>Transaction Count: {parsedData.transactionCount}</p>
-                    <p>ISA Control Number: {parsedData.controlNumbers.isa}</p>
-                    <p>GS Control Number: {parsedData.controlNumbers.gs}</p>
-                    <p>ST Control Number: {parsedData.controlNumbers.st}</p>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </CardContent>
       </Card>
 
+      {parsedData && (
+        <Card className="border-green-200 bg-green-50">
+          <CardHeader>
+            <CardTitle className="text-center text-green-800 flex items-center justify-center gap-2">
+              <CheckCircle className="w-5 h-5" />
+              Parsing Results
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-medium text-green-800 mb-3">Control Numbers</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-green-700">ISA Control:</span>
+                    <span className="font-mono">{parsedData.controlNumbers.isa}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-green-700">GS Control:</span>
+                    <span className="font-mono">{parsedData.controlNumbers.gs}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-green-700">ST Control:</span>
+                    <span className="font-mono">{parsedData.controlNumbers.st}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <h4 className="font-medium text-green-800 mb-3">Structure Analysis</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-green-700">Transaction Count:</span>
+                    <span className="font-medium">{parsedData.transactionCount}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-green-700">Total Loops:</span>
+                    <span className="font-medium">{parsedData.loops.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-green-700">Total Segments:</span>
+                    <span className="font-medium">{parsedData.segments.length}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="mt-6">
+              <h4 className="font-medium text-green-800 mb-3">Identified Loops</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {parsedData.loops.map((loop, index) => (
+                  <div key={index} className="p-3 bg-white rounded border">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-gray-900">{loop.name}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {loop.id}
+                      </Badge>
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      Segments: {loop.segments.join(', ')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
-          <CardTitle>X12N 278 Schema Structure (005010X217)</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-center">X12N 278 Schema Structure (005010X217)</CardTitle>
+          <CardDescription className="text-center">
             HIPAA-compliant schema for Prior Authorization Request transactions
           </CardDescription>
         </CardHeader>

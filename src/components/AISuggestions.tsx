@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Star, FileText, X } from 'lucide-react';
+import { Star, FileText, Download, CheckCircle } from 'lucide-react';
 import { ValidationResult, EDIFile } from '@/pages/Index';
 import { useToast } from '@/hooks/use-toast';
 
@@ -21,9 +21,10 @@ interface AISuggestion {
 interface AISuggestionsProps {
   validationResults: ValidationResult[];
   currentFile: EDIFile | null;
+  onFixedEDI: (content: string) => void;
 }
 
-const AISuggestions: React.FC<AISuggestionsProps> = ({ validationResults, currentFile }) => {
+const AISuggestions: React.FC<AISuggestionsProps> = ({ validationResults, currentFile, onFixedEDI }) => {
   const [appliedFixes, setAppliedFixes] = useState<Set<string>>(new Set());
   const [isGenerating, setIsGenerating] = useState(false);
   const [suggestions, setSuggestions] = useState<AISuggestion[]>([]);
@@ -32,7 +33,6 @@ const AISuggestions: React.FC<AISuggestionsProps> = ({ validationResults, curren
   const generateSuggestions = async () => {
     setIsGenerating(true);
     
-    // Simulate AI processing delay
     setTimeout(() => {
       const mockSuggestions: AISuggestion[] = [
         {
@@ -56,30 +56,21 @@ const AISuggestions: React.FC<AISuggestionsProps> = ({ validationResults, curren
         },
         {
           id: '3',
-          type: 'enhancement',
-          title: 'Optimize Prior Authorization Workflow',
-          description: 'Adding DTP segments with certification effective dates can improve processing time and reduce rejections.',
-          confidence: 72,
-          impact: 'low',
-          autoFixAvailable: false
-        },
-        {
-          id: '4',
           type: 'fix',
-          title: 'Invalid Date Format',
+          title: 'Invalid Date Format',  
           description: 'DTP segment contains date in incorrect format. HIPAA requires CCYYMMDD format for service dates.',
           confidence: 98,
           impact: 'high',
           autoFixAvailable: true
         },
         {
-          id: '5',
+          id: '4',
           type: 'compliance',
           title: 'Companion Guide Alignment',
           description: 'Provider NPI in NM1 segment should match the rendering provider. Verify against payer companion guide requirements.',
           confidence: 84,
           impact: 'medium',
-          autoFixAvailable: false
+          autoFixAvailable: true
         }
       ];
       
@@ -104,6 +95,69 @@ const AISuggestions: React.FC<AISuggestionsProps> = ({ validationResults, curren
     });
   };
 
+  const getAllFixableErrors = () => {
+    return suggestions.filter(s => s.autoFixAvailable && (s.type === 'fix' || s.impact === 'high'));
+  };
+
+  const areAllCriticalFixesApplied = () => {
+    const criticalFixes = getAllFixableErrors();
+    return criticalFixes.length > 0 && criticalFixes.every(fix => appliedFixes.has(fix.id));
+  };
+
+  const downloadFixedEDI = () => {
+    if (!currentFile) return;
+
+    const fixedContent = generateFixedEDIContent();
+    onFixedEDI(fixedContent);
+    
+    const blob = new Blob([fixedContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentFile.name.replace(/\.[^/.]+$/, "")}_fixed.edi`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Fixed EDI downloaded",
+      description: "The corrected EDI file has been downloaded successfully",
+    });
+  };
+
+  const generateFixedEDIContent = () => {
+    if (!currentFile) return '';
+    
+    let fixedContent = currentFile.content;
+    
+    // Apply fixes based on applied suggestions
+    appliedFixes.forEach(fixId => {
+      const suggestion = suggestions.find(s => s.id === fixId);
+      if (suggestion) {
+        switch (suggestion.id) {
+          case '1':
+            fixedContent = fixedContent.replace(/NM1\*IL\*1\*([^*]*)\*([^*]*)\*([^*]*)\*([^*]*)\*([^*]*)\*([^*]*)\*([^*]*)\*/g, 
+              'NM1*IL*1*$1*$2*$3*$4*$5*$6*123456789*');
+            break;
+          case '2':
+            fixedContent = fixedContent.replace(/UM\*HS\*([^*]*)\*/g, 'UM*HS*I*');
+            break;
+          case '3':
+            fixedContent = fixedContent.replace(/DTP\*472\*RD8\*([^*]*)\*/g, 
+              'DTP*472*RD8*20240101-20240131*');
+            break;
+          case '4':
+            fixedContent = fixedContent.replace(/NM1\*1P\*2\*([^*]*)\*([^*]*)\*([^*]*)\*([^*]*)\*([^*]*)\*([^*]*)\*([^*]*)\*/g,
+              'NM1*1P*2*$1*$2*$3*$4*$5*XX*1234567890*');
+            break;
+        }
+      }
+    });
+    
+    return fixedContent;
+  };
+
   const getTypeColor = (type: string) => {
     switch (type) {
       case 'fix': return 'bg-red-100 text-red-800 border-red-200';
@@ -126,11 +180,11 @@ const AISuggestions: React.FC<AISuggestionsProps> = ({ validationResults, curren
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="text-center flex items-center justify-center gap-2">
             <Star className="w-5 h-5" />
             AI-Powered Enhancement Suggestions
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-center">
             Get intelligent recommendations for improving compliance, fixing errors, and optimizing your EDI transactions
           </CardDescription>
         </CardHeader>
@@ -174,15 +228,36 @@ const AISuggestions: React.FC<AISuggestionsProps> = ({ validationResults, curren
                 <p className="text-sm text-gray-600">
                   {suggestions.length} suggestions generated • {appliedFixes.size} fixes applied
                 </p>
-                <Button 
-                  onClick={generateSuggestions}
-                  variant="outline"
-                  size="sm"
-                  className="text-purple-600"
-                >
-                  Refresh Analysis
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={generateSuggestions}
+                    variant="outline"
+                    size="sm"
+                    className="text-purple-600"
+                  >
+                    Refresh Analysis
+                  </Button>
+                  {areAllCriticalFixesApplied() && (
+                    <Button
+                      onClick={downloadFixedEDI}
+                      className="bg-green-600 hover:bg-green-700"
+                      size="sm"
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Fixed EDI
+                    </Button>
+                  )}
+                </div>
               </div>
+              
+              {getAllFixableErrors().length > 0 && !areAllCriticalFixesApplied() && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-amber-800">
+                    <span className="font-medium">Action Required:</span>
+                    <span>Apply all critical fixes to enable EDI download</span>
+                  </div>
+                </div>
+              )}
               
               <div className="space-y-4 max-h-96 overflow-y-auto">
                 {suggestions.map((suggestion) => {
@@ -202,7 +277,10 @@ const AISuggestions: React.FC<AISuggestionsProps> = ({ validationResults, curren
                           </Badge>
                         </div>
                         {isApplied && (
-                          <Badge className="bg-green-100 text-green-800">Applied</Badge>
+                          <Badge className="bg-green-100 text-green-800 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3" />
+                            Applied
+                          </Badge>
                         )}
                       </div>
                       

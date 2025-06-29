@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Folder, FileText, Search, X } from 'lucide-react';
+import { Folder, FileText, Search, X, TrendingUp } from 'lucide-react';
+import { EDIFile, CustomSchema, ValidationResult } from '@/pages/Index';
 import { useToast } from '@/hooks/use-toast';
 
 interface HistoryItem {
@@ -16,75 +17,100 @@ interface HistoryItem {
   warningCount: number;
   processingTime: number;
   fileSize: number;
+  schemaUsed?: string;
+  complianceScore: number;
+  transactionId: string;
 }
 
-const TransactionHistory: React.FC = () => {
+interface TransactionHistoryProps {
+  currentFile?: EDIFile | null;
+  customSchema?: CustomSchema | null;
+  validationResults?: ValidationResult[];
+}
+
+const TransactionHistory: React.FC<TransactionHistoryProps> = ({ 
+  currentFile, 
+  customSchema, 
+  validationResults = [] 
+}) => {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'completed' | 'failed'>('all');
   const { toast } = useToast();
 
   useEffect(() => {
-    // Load mock history data
-    const mockHistory: HistoryItem[] = [
-      {
-        id: '1',
-        filename: 'prior_auth_request_001.edi',
-        uploadedAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-        status: 'completed',
-        transactionCount: 1,
-        errorCount: 0,
-        warningCount: 2,
-        processingTime: 1.2,
-        fileSize: 4567
-      },
-      {
-        id: '2',
-        filename: 'batch_278_requests.x12',
-        uploadedAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-        status: 'completed',
-        transactionCount: 5,
-        errorCount: 1,
-        warningCount: 3,
-        processingTime: 3.8,
-        fileSize: 12340
-      },
-      {
-        id: '3',
-        filename: 'test_invalid_format.txt',
-        uploadedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
-        status: 'failed',
-        transactionCount: 0,
-        errorCount: 5,
-        warningCount: 0,
-        processingTime: 0.3,
-        fileSize: 2341
-      },
-      {
-        id: '4',
-        filename: 'emergency_auth_278.edi',
-        uploadedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 1 week ago
-        status: 'completed',
-        transactionCount: 1,
-        errorCount: 0,
-        warningCount: 1,
-        processingTime: 0.9,
-        fileSize: 3456
-      },
-      {
-        id: '5',
-        filename: 'monthly_batch_278.x12',
-        uploadedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), // 2 weeks ago
-        status: 'completed',
-        transactionCount: 15,
-        errorCount: 2,
-        warningCount: 8,
-        processingTime: 12.5,
-        fileSize: 45678
+    const loadHistory = () => {
+      const baseHistory: HistoryItem[] = [
+        {
+          id: '2',
+          filename: 'batch_278_requests.x12',
+          uploadedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+          status: 'completed',
+          transactionCount: 5,
+          errorCount: 1,
+          warningCount: 3,
+          processingTime: 3.8,
+          fileSize: 12340,
+          schemaUsed: '278 005010X217',
+          complianceScore: 87,
+          transactionId: 'TXN-2024-0001'
+        },
+        {
+          id: '3',
+          filename: 'test_invalid_format.txt',
+          uploadedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+          status: 'failed',
+          transactionCount: 0,
+          errorCount: 5,
+          warningCount: 0,
+          processingTime: 0.3,
+          fileSize: 2341,
+          schemaUsed: 'Default 278',
+          complianceScore: 0,
+          transactionId: 'TXN-2024-0002'
+        }
+      ];
+
+      // Add current session if available
+      if (currentFile) {
+        const currentSession: HistoryItem = {
+          id: '1',
+          filename: currentFile.name,
+          uploadedAt: currentFile.uploadedAt,
+          status: validationResults.length > 0 ? 'completed' : 'processing',
+          transactionCount: 1,
+          errorCount: validationResults.filter(r => r.type === 'error').length,
+          warningCount: validationResults.filter(r => r.type === 'warning').length,
+          processingTime: 1.2,
+          fileSize: currentFile.size,
+          schemaUsed: customSchema ? `${customSchema.transactionType} ${customSchema.version}` : 'Default 278',
+          complianceScore: calculateComplianceScore(validationResults),
+          transactionId: `TXN-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`
+        };
+        
+        setHistory([currentSession, ...baseHistory]);
+      } else {
+        setHistory(baseHistory);
       }
-    ];
+    };
+
+    loadHistory();
+  }, [currentFile, customSchema, validationResults]);
+
+  const calculateComplianceScore = (results: ValidationResult[]) => {
+    if (results.length === 0) return 100;
     
-    setHistory(mockHistory);
-  }, []);
+    const totalIssues = results.length;
+    const errorWeight = 3;
+    const warningWeight = 1;
+    
+    const errorCount = results.filter(r => r.type === 'error').length;
+    const warningCount = results.filter(r => r.type === 'warning').length;
+    
+    const weightedScore = (errorCount * errorWeight) + (warningCount * warningWeight);
+    const maxPossibleScore = totalIssues * errorWeight;
+    
+    return Math.max(0, Math.round(100 - (weightedScore / maxPossibleScore) * 100));
+  };
 
   const filteredHistory = history.filter(item => 
     filter === 'all' || item.status === filter
@@ -121,6 +147,12 @@ const TransactionHistory: React.FC = () => {
     }
   };
 
+  const getComplianceColor = (score: number) => {
+    if (score >= 90) return 'text-green-600';
+    if (score >= 70) return 'text-amber-600';
+    return 'text-red-600';
+  };
+
   const formatFileSize = (bytes: number) => {
     return `${Math.round(bytes / 1024)}KB`;
   };
@@ -143,17 +175,16 @@ const TransactionHistory: React.FC = () => {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="text-center flex items-center justify-center gap-2">
             <Folder className="w-5 h-5" />
             Transaction Processing History
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-center">
             View and manage your processed EDI files with detailed analytics and reprocessing options
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {/* Filter Options */}
             <div className="flex items-center justify-between">
               <div className="flex gap-2">
                 <Button
@@ -186,7 +217,6 @@ const TransactionHistory: React.FC = () => {
               </div>
             </div>
 
-            {/* History List */}
             {filteredHistory.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <Search className="w-12 h-12 mx-auto mb-4 text-gray-300" />
@@ -205,9 +235,12 @@ const TransactionHistory: React.FC = () => {
                           <Badge className={`text-xs ${getStatusColor(item.status)}`}>
                             {item.status.toUpperCase()}
                           </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {item.transactionId}
+                          </Badge>
                         </div>
                         
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600 mb-3">
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm text-gray-600 mb-3">
                           <div>
                             <span className="font-medium">Transactions:</span> {item.transactionCount}
                           </div>
@@ -220,12 +253,20 @@ const TransactionHistory: React.FC = () => {
                           <div>
                             <span className="font-medium">Size:</span> {formatFileSize(item.fileSize)}
                           </div>
+                          <div>
+                            <span className="font-medium">Compliance:</span> 
+                            <span className={`ml-1 font-bold ${getComplianceColor(item.complianceScore)}`}>
+                              {item.complianceScore}%
+                            </span>
+                          </div>
                         </div>
                         
                         <div className="flex items-center gap-4 text-xs text-gray-500">
                           <span>Processed {formatTimeAgo(item.uploadedAt)}</span>
                           <span>•</span>
                           <span>Processing time: {item.processingTime}s</span>
+                          <span>•</span>
+                          <span>Schema: {item.schemaUsed}</span>
                         </div>
                       </div>
                       
@@ -264,11 +305,13 @@ const TransactionHistory: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Summary Statistics */}
       {history.length > 0 && (
         <Card className="bg-blue-50 border-blue-200">
           <CardHeader>
-            <CardTitle className="text-blue-800">Processing Summary</CardTitle>
+            <CardTitle className="text-center text-blue-800 flex items-center justify-center gap-2">
+              <TrendingUp className="w-5 h-5" />
+              Processing Summary
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -292,9 +335,9 @@ const TransactionHistory: React.FC = () => {
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-amber-600">
-                  {history.reduce((sum, item) => sum + item.warningCount, 0)}
+                  {Math.round(history.reduce((sum, item) => sum + item.complianceScore, 0) / history.length)}%
                 </div>
-                <div className="text-amber-600">Total Warnings</div>
+                <div className="text-amber-600">Avg Compliance</div>
               </div>
             </div>
           </CardContent>

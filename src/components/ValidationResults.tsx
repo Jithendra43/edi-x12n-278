@@ -1,10 +1,10 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Hexagon, FileText, X, CheckCircle } from 'lucide-react';
-import { ParsedEDI, ValidationResult } from '@/pages/Index';
+import { Hexagon, FileText, CheckCircle } from 'lucide-react';
+import { ParsedEDI, ValidationResult, CustomSchema } from '@/pages/Index';
 import { mockValidateEDI } from '@/utils/mockApi';
 import { useToast } from '@/hooks/use-toast';
 
@@ -12,12 +12,14 @@ interface ValidationResultsProps {
   parsedData: ParsedEDI | null;
   validationResults: ValidationResult[];
   onValidationComplete: (results: ValidationResult[]) => void;
+  customSchema?: CustomSchema | null;
 }
 
 const ValidationResults: React.FC<ValidationResultsProps> = ({
   parsedData,
   validationResults,
-  onValidationComplete
+  onValidationComplete,
+  customSchema
 }) => {
   const [isValidating, setIsValidating] = useState(false);
   const [filter, setFilter] = useState<'all' | 'error' | 'warning' | 'info'>('all');
@@ -70,7 +72,7 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
       { level: 4, name: 'Business Rules', description: 'Transaction-specific rules' },
       { level: 5, name: 'Code Sets', description: 'Valid code validation' },
       { level: 6, name: 'Situational', description: 'Conditional requirements' },
-      { level: 7, name: 'Implementation', description: 'Companion guide rules' }
+      { level: 7, name: 'Implementation', description: 'Custom schema rules' }
     ];
     return levels.find(l => l.level === level) || levels[0];
   };
@@ -83,12 +85,17 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-center gap-2">
+          <CardTitle className="text-center flex items-center justify-center gap-2">
             <Hexagon className="w-5 h-5" />
             SNIP Level Validation
           </CardTitle>
           <CardDescription className="text-center">
             Comprehensive validation across all 7 SNIP levels for HIPAA compliance
+            {customSchema && (
+              <span className="block mt-2 text-blue-600 font-medium">
+                Using custom schema: {customSchema.transactionType} {customSchema.version}
+              </span>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -142,7 +149,7 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
       {validationResults.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center justify-center gap-4">
+            <CardTitle className="text-center flex items-center justify-center gap-4">
               <span>Validation Results</span>
               <div className="flex gap-2">
                 <Badge variant="outline" className="bg-red-50 text-red-700">
