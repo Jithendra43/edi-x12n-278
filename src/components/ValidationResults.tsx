@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Hexagon, FileText, X } from 'lucide-react';
+import { Hexagon, FileText, X, CheckCircle } from 'lucide-react';
 import { ParsedEDI, ValidationResult } from '@/pages/Index';
 import { mockValidateEDI } from '@/utils/mockApi';
 import { useToast } from '@/hooks/use-toast';
@@ -75,15 +75,19 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
     return levels.find(l => l.level === level) || levels[0];
   };
 
+  const errorCount = validationResults.filter(r => r.type === 'error').length;
+  const warningCount = validationResults.filter(r => r.type === 'warning').length;
+  const infoCount = validationResults.filter(r => r.type === 'info').length;
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center justify-center gap-2">
             <Hexagon className="w-5 h-5" />
             SNIP Level Validation
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-center">
             Comprehensive validation across all 7 SNIP levels for HIPAA compliance
           </CardDescription>
         </CardHeader>
@@ -96,7 +100,7 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="text-center flex-1">
                   <p className="font-medium">Ready for validation</p>
                   <p className="text-sm text-gray-600">
                     {parsedData.transactionCount} transaction(s) to validate
@@ -138,24 +142,34 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
       {validationResults.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center justify-between">
+            <CardTitle className="flex items-center justify-center gap-4">
               <span>Validation Results</span>
               <div className="flex gap-2">
                 <Badge variant="outline" className="bg-red-50 text-red-700">
-                  {validationResults.filter(r => r.type === 'error').length} Errors
+                  {errorCount} Errors
                 </Badge>
                 <Badge variant="outline" className="bg-amber-50 text-amber-700">
-                  {validationResults.filter(r => r.type === 'warning').length} Warnings
+                  {warningCount} Warnings
                 </Badge>
                 <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                  {validationResults.filter(r => r.type === 'info').length} Info
+                  {infoCount} Info
                 </Badge>
               </div>
             </CardTitle>
+            <CardDescription className="text-center">
+              {errorCount === 0 ? (
+                <span className="flex items-center justify-center gap-2 text-green-700">
+                  <CheckCircle className="w-4 h-4" />
+                  No critical errors found - ready for processing
+                </span>
+              ) : (
+                `${errorCount} critical issues require attention before processing`
+              )}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex gap-2">
+              <div className="flex justify-center gap-2">
                 <Button
                   variant={filter === 'all' ? 'default' : 'outline'}
                   size="sm"
@@ -169,7 +183,7 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
                   onClick={() => setFilter('error')}
                   className={filter === 'error' ? 'bg-red-600 hover:bg-red-700' : ''}
                 >
-                  Errors ({validationResults.filter(r => r.type === 'error').length})
+                  Errors ({errorCount})
                 </Button>
                 <Button
                   variant={filter === 'warning' ? 'default' : 'outline'}
@@ -177,7 +191,7 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
                   onClick={() => setFilter('warning')}
                   className={filter === 'warning' ? 'bg-amber-600 hover:bg-amber-700' : ''}
                 >
-                  Warnings ({validationResults.filter(r => r.type === 'warning').length})
+                  Warnings ({warningCount})
                 </Button>
                 <Button
                   variant={filter === 'info' ? 'default' : 'outline'}
@@ -185,7 +199,7 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
                   onClick={() => setFilter('info')}
                   className={filter === 'info' ? 'bg-blue-600 hover:bg-blue-700' : ''}
                 >
-                  Info ({validationResults.filter(r => r.type === 'info').length})
+                  Info ({infoCount})
                 </Button>
               </div>
 
