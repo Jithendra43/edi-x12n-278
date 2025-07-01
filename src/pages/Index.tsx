@@ -1,16 +1,15 @@
-
 import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import SchemaMapper from '@/components/SchemaMapper';
 import FileUpload from '@/components/FileUpload';
-import SchemaVisualization from '@/components/SchemaVisualization';
 import ValidationResults from '@/components/ValidationResults';
 import AISuggestions from '@/components/AISuggestions';
 import TransformationPanel from '@/components/TransformationPanel';
 import TransactionHistory from '@/components/TransactionHistory';
-import { FileText, Upload, Search, Hexagon, Star, Folder, Settings, ChevronRight } from 'lucide-react';
+import { FileText, Upload, Hexagon, Star, Folder, Settings, ChevronRight } from 'lucide-react';
 
 export interface EDIFile {
   id: string;
@@ -56,6 +55,27 @@ const Index = () => {
   const [customSchema, setCustomSchema] = useState<CustomSchema | null>(null);
   const [fixedEDIContent, setFixedEDIContent] = useState<string>('');
   const [activeTab, setActiveTab] = useState('mapper');
+  const [selectedTransaction, setSelectedTransaction] = useState('278');
+  const [selectedVersion, setSelectedVersion] = useState('005010X217');
+
+  const transactionTypes = [
+    { value: '270', label: '270 - Eligibility, Coverage or Benefit Inquiry' },
+    { value: '271', label: '271 - Eligibility, Coverage or Benefit Response' },
+    { value: '278', label: '278 - Health Care Services Review Request' },
+    { value: '837', label: '837 - Health Care Claim: Professional' },
+    { value: '835', label: '835 - Health Care Claim Payment/Advice' },
+    { value: '275', label: '275 - Patient Information' },
+    { value: '277', label: '277 - Health Care Information Status Notification' },
+    { value: '999', label: '999 - Implementation Acknowledgment' },
+    { value: 'TA1', label: 'TA1 - Interchange Acknowledgment' }
+  ];
+
+  const versions = [
+    { value: '005010X217', label: '005010X217 - CMS esMD X12N 278 Companion Guide AR2024.10.0' },
+    { value: '005010X212', label: '005010X212 - ASC X12N Standard' },
+    { value: '005010X279', label: '005010X279 - CMS Implementation' },
+    { value: '004010X094', label: '004010X094 - Legacy Standard' }
+  ];
 
   const handleSchemaGenerated = (schema: CustomSchema) => {
     setCustomSchema(schema);
@@ -86,8 +106,7 @@ const Index = () => {
     switch (tabName) {
       case 'mapper': return true;
       case 'upload': return !!customSchema;
-      case 'parse': return !!currentFile;
-      case 'validate': return !!parsedData;
+      case 'validate': return !!currentFile;
       case 'ai': return validationResults.length > 0;
       case 'transform': return !!parsedData;
       case 'history': return true;
@@ -96,7 +115,7 @@ const Index = () => {
   };
 
   const navigateToNext = () => {
-    const tabOrder = ['mapper', 'upload', 'parse', 'validate', 'ai', 'transform', 'history'];
+    const tabOrder = ['mapper', 'upload', 'validate', 'ai', 'transform', 'history'];
     const currentIndex = tabOrder.indexOf(activeTab);
     if (currentIndex < tabOrder.length - 1) {
       const nextTab = tabOrder[currentIndex + 1];
@@ -109,8 +128,7 @@ const Index = () => {
   const getNextButtonText = () => {
     switch (activeTab) {
       case 'mapper': return 'Proceed to Upload';
-      case 'upload': return 'Proceed to Parse';
-      case 'parse': return 'Proceed to Validate';
+      case 'upload': return 'Proceed to Validate';
       case 'validate': return 'Proceed to AI';
       case 'ai': return 'Proceed to Transform';
       case 'transform': return 'Proceed to History';
@@ -122,7 +140,6 @@ const Index = () => {
     switch (activeTab) {
       case 'mapper': return !!customSchema;
       case 'upload': return !!currentFile;
-      case 'parse': return !!parsedData;
       case 'validate': return validationResults.length > 0;
       case 'ai': return true;
       case 'transform': return true;
@@ -130,42 +147,94 @@ const Index = () => {
     }
   };
 
+  const getTransactionDescription = () => {
+    const transaction = transactionTypes.find(t => t.value === selectedTransaction);
+    const version = versions.find(v => v.value === selectedVersion);
+    return `ASC X12N ${selectedTransaction} – ${transaction?.label.split(' - ')[1] || 'Health Care Services Review'} – Request for Review & Response (${selectedVersion})`;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-slate-100">
       <div className="container mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <div className="flex items-center justify-center w-12 h-12 bg-blue-600 rounded-lg">
-              <FileText className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">C-HIT EDI X12N 278 Processor</h1>
-              <p className="text-gray-600">Healthcare Prior Authorization Request Processing & Validation</p>
-            </div>
-          </div>
-          
-          <div className="flex justify-center gap-4 text-sm text-gray-600">
-            <span className="flex items-center gap-1">
-              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-              HIPAA Compliant
-            </span>
-            <span className="flex items-center gap-1">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              CAQH CORE Certified
-            </span>
-            <span className="flex items-center gap-1">
-              <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-              AI Enhanced
-            </span>
-          </div>
-        </div>
+        
+        {/* Global Header with Transaction Selector */}
+        <Card className="mb-6 border-blue-200 bg-white shadow-lg">
+          <CardHeader className="pb-4">
+            <div className="text-center space-y-4">
+              <div className="flex items-center justify-center gap-3">
+                <div className="flex items-center justify-center w-12 h-12 bg-blue-600 rounded-lg">
+                  <FileText className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900">C-HIT EVIQ</h1>
+                  <p className="text-lg text-blue-600 font-medium">EVIQ: Intelligent EDI. Verified. Interpreted. Qualified</p>
+                </div>
+              </div>
+              
+              <div className="flex justify-center gap-4 text-sm text-gray-600">
+                <span className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  HIPAA Compliant
+                </span>
+                <span className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  TR3/CMS Certified
+                </span>
+                <span className="flex items-center gap-1">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                  AI Enhanced
+                </span>
+              </div>
 
+              {/* Transaction Selector */}
+              <div className="bg-gray-50 rounded-lg p-4 max-w-4xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Transaction Type</label>
+                    <Select value={selectedTransaction} onValueChange={setSelectedTransaction}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {transactionTypes.map(type => (
+                          <SelectItem key={type.value} value={type.value}>
+                            {type.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">Implementation Version</label>
+                    <Select value={selectedVersion} onValueChange={setSelectedVersion}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {versions.map(version => (
+                          <SelectItem key={version.value} value={version.value}>
+                            {version.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="text-center text-sm font-medium text-blue-800 bg-blue-100 rounded p-2">
+                  {getTransactionDescription()}
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+
+        {/* Status Cards */}
         {currentFile && (
           <Card className="mb-6 border-blue-200 bg-blue-50">
             <CardHeader className="pb-3">
               <CardTitle className="text-center text-lg flex items-center justify-center gap-2">
                 <FileText className="w-5 h-5" />
-                Current File: {currentFile.name}
+                Active File: {currentFile.name}
               </CardTitle>
               <CardDescription className="text-center">
                 Status: <span className="capitalize font-medium text-blue-700">{currentFile.status}</span> • 
@@ -191,8 +260,9 @@ const Index = () => {
           </Card>
         )}
 
+        {/* Main Workflow Tabs - Removed Parser */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-7 bg-white shadow-sm border">
+          <TabsList className="grid w-full grid-cols-6 bg-white shadow-sm border">
             <TabsTrigger value="mapper" className="flex items-center gap-2">
               <Settings className="w-4 h-4" />
               Mapper
@@ -204,14 +274,6 @@ const Index = () => {
             >
               <Upload className="w-4 h-4" />
               Upload
-            </TabsTrigger>
-            <TabsTrigger 
-              value="parse" 
-              className="flex items-center gap-2"
-              disabled={!canNavigateToTab('parse')}
-            >
-              <Search className="w-4 h-4" />
-              Parse
             </TabsTrigger>
             <TabsTrigger 
               value="validate" 
@@ -244,7 +306,11 @@ const Index = () => {
           </TabsList>
 
           <TabsContent value="mapper" className="mt-6">
-            <SchemaMapper onSchemaGenerated={handleSchemaGenerated} />
+            <SchemaMapper 
+              onSchemaGenerated={handleSchemaGenerated}
+              selectedTransaction={selectedTransaction}
+              selectedVersion={selectedVersion}
+            />
             {canShowNextButton() && (
               <div className="flex justify-center mt-6">
                 <Button onClick={navigateToNext} className="bg-blue-600 hover:bg-blue-700">
@@ -267,28 +333,14 @@ const Index = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="parse" className="mt-6">
-            <SchemaVisualization 
-              currentFile={currentFile}
-              parsedData={parsedData}
-              onFileParsed={handleFileParsed}
-            />
-            {canShowNextButton() && (
-              <div className="flex justify-center mt-6">
-                <Button onClick={navigateToNext} className="bg-blue-600 hover:bg-blue-700">
-                  {getNextButtonText()}
-                  <ChevronRight className="w-4 h-4 ml-2" />
-                </Button>
-              </div>
-            )}
-          </TabsContent>
-
           <TabsContent value="validate" className="mt-6">
             <ValidationResults 
               parsedData={parsedData}
               validationResults={validationResults}
               onValidationComplete={handleValidationComplete}
               customSchema={customSchema}
+              currentFile={currentFile}
+              onFileParsed={handleFileParsed}
             />
             {canShowNextButton() && (
               <div className="flex justify-center mt-6">

@@ -1,8 +1,6 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -10,9 +8,12 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ChevronDown, ChevronRight, Settings, Download, FileCode, Plus, Minus, ArrowUp, ArrowDown, Copy, Trash2 } from 'lucide-react';
 import { CustomSchema } from '@/pages/Index';
 import { useToast } from '@/hooks/use-toast';
+import { getImplementationGuideInfo } from '@/utils/fileNaming';
 
 interface SchemaMapperProps {
   onSchemaGenerated: (schema: CustomSchema) => void;
+  selectedTransaction: string;
+  selectedVersion: string;
 }
 
 interface SchemaElement {
@@ -29,38 +30,24 @@ interface SchemaElement {
   minLength?: number;
   maxLength?: number;
   dataType?: string;
+  position?: string;
+  usage?: string;
+  codeSets?: string[];
 }
 
-const SchemaMapper: React.FC<SchemaMapperProps> = ({ onSchemaGenerated }) => {
-  const [selectedTransaction, setSelectedTransaction] = useState('');
-  const [selectedVersion, setSelectedVersion] = useState('');
+const SchemaMapper: React.FC<SchemaMapperProps> = ({ 
+  onSchemaGenerated, 
+  selectedTransaction, 
+  selectedVersion 
+}) => {
   const [defaultSchema, setDefaultSchema] = useState<SchemaElement[]>([]);
   const [customSchema, setCustomSchema] = useState<SchemaElement[]>([]);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [selectedElements, setSelectedElements] = useState<Set<string>>(new Set());
-  const [showAddElementDialog, setShowAddElementDialog] = useState(false);
-  const [newElementName, setNewElementName] = useState('');
+  const [showBulkActions, setShowBulkActions] = useState(false);
   const { toast } = useToast();
 
-  const transactionTypes = [
-    { value: '270', label: '270 - Eligibility, Coverage or Benefit Inquiry' },
-    { value: '271', label: '271 - Eligibility, Coverage or Benefit Response' },
-    { value: '278', label: '278 - Health Care Services Review Request' },
-    { value: '837', label: '837 - Health Care Claim: Professional' },
-    { value: '835', label: '835 - Health Care Claim Payment/Advice' },
-    { value: '275', label: '275 - Patient Information' },
-    { value: '277', label: '277 - Health Care Information Status Notification' },
-    { value: '999', label: '999 - Implementation Acknowledgment' },
-    { value: 'TA1', label: 'TA1 - Interchange Acknowledgment' }
-  ];
-
-  const versions = [
-    { value: '005010X217', label: '005010X217 - Current Implementation Guide' },
-    { value: '005010X212', label: '005010X212 - ASC X12N Standard' },
-    { value: '005010X279', label: '005010X279 - CMS Implementation' },
-    { value: '004010X094', label: '004010X094 - Legacy Standard' }
-  ];
-
+  // Full TR3/CMS-compliant schema structure for 278 005010X217
   const comprehensive278Schema: SchemaElement[] = [
     {
       id: 'ISA',
@@ -71,12 +58,13 @@ const SchemaMapper: React.FC<SchemaMapperProps> = ({ onSchemaGenerated }) => {
       maxUse: 1,
       status: 'mandatory',
       order: 1,
+      position: '0010',
       children: [
-        { id: 'ISA01', name: 'Authorization Information Qualifier', description: '00=No Authorization, 03=Password', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 2, maxLength: 2, dataType: 'ID' },
+        { id: 'ISA01', name: 'Authorization Information Qualifier', description: '00=No Authorization, 03=Password', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 2, maxLength: 2, dataType: 'ID', codeSets: ['00', '03'] },
         { id: 'ISA02', name: 'Authorization Information', description: 'Authorization password or spaces', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 2, minLength: 10, maxLength: 10, dataType: 'AN' },
-        { id: 'ISA03', name: 'Security Information Qualifier', description: '00=No Security, 01=Password', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 3, minLength: 2, maxLength: 2, dataType: 'ID' },
+        { id: 'ISA03', name: 'Security Information Qualifier', description: '00=No Security, 01=Password', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 3, minLength: 2, maxLength: 2, dataType: 'ID', codeSets: ['00', '01'] },
         { id: 'ISA04', name: 'Security Information', description: 'Security password or spaces', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 4, minLength: 10, maxLength: 10, dataType: 'AN' },
-        { id: 'ISA05', name: 'Interchange ID Qualifier', description: 'ZZ=Mutually Defined', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 5, minLength: 2, maxLength: 2, dataType: 'ID' },
+        { id: 'ISA05', name: 'Interchange ID Qualifier', description: 'ZZ=Mutually Defined', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 5, minLength: 2, maxLength: 2, dataType: 'ID', codeSets: ['ZZ', '01', '14', '20', '27', '28', '29', '30'] },
         { id: 'ISA06', name: 'Interchange Sender ID', description: 'Sender identification', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 6, minLength: 15, maxLength: 15, dataType: 'AN' }
       ]
     },
@@ -89,8 +77,9 @@ const SchemaMapper: React.FC<SchemaMapperProps> = ({ onSchemaGenerated }) => {
       maxUse: 1,
       status: 'mandatory',
       order: 2,
+      position: '0020',
       children: [
-        { id: 'GS01', name: 'Functional Identifier Code', description: 'HS=Health Services', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 2, maxLength: 2, dataType: 'ID' },
+        { id: 'GS01', name: 'Functional Identifier Code', description: 'HS=Health Services', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 2, maxLength: 2, dataType: 'ID', codeSets: ['HS'] },
         { id: 'GS02', name: 'Application Sender Code', description: 'Code identifying party sending', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 2, minLength: 2, maxLength: 15, dataType: 'AN' },
         { id: 'GS03', name: 'Application Receiver Code', description: 'Code identifying party receiving', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 3, minLength: 2, maxLength: 15, dataType: 'AN' },
         { id: 'GS04', name: 'Date', description: 'Date of transmission CCYYMMDD', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 4, minLength: 8, maxLength: 8, dataType: 'DT' }
@@ -105,8 +94,9 @@ const SchemaMapper: React.FC<SchemaMapperProps> = ({ onSchemaGenerated }) => {
       maxUse: 1,
       status: 'mandatory',
       order: 3,
+      position: '0030',
       children: [
-        { id: 'ST01', name: 'Transaction Set Identifier Code', description: '278=Health Care Services Review', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 3, maxLength: 3, dataType: 'ID' },
+        { id: 'ST01', name: 'Transaction Set Identifier Code', description: '278=Health Care Services Review', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 3, maxLength: 3, dataType: 'ID', codeSets: ['278'] },
         { id: 'ST02', name: 'Transaction Set Control Number', description: 'Unique control number', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 2, minLength: 4, maxLength: 9, dataType: 'AN' },
         { id: 'ST03', name: 'Implementation Convention Reference', description: 'Version identifier', type: 'element', required: false, maxUse: 1, status: 'optional', order: 3, minLength: 1, maxLength: 35, dataType: 'AN' }
       ]
@@ -120,13 +110,14 @@ const SchemaMapper: React.FC<SchemaMapperProps> = ({ onSchemaGenerated }) => {
       maxUse: 1,
       status: 'mandatory',
       order: 4,
+      position: '0200',
       children: [
-        { id: 'BHT01', name: 'Hierarchical Structure Code', description: '0007=Hierarchical Structure', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 4, maxLength: 4, dataType: 'ID' },
-        { id: 'BHT02', name: 'Transaction Set Purpose Code', description: '00=Original, 18=Reissue', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 2, minLength: 2, maxLength: 2, dataType: 'ID' },
+        { id: 'BHT01', name: 'Hierarchical Structure Code', description: '0007=Hierarchical Structure', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 4, maxLength: 4, dataType: 'ID', codeSets: ['0007'] },
+        { id: 'BHT02', name: 'Transaction Set Purpose Code', description: '00=Original, 18=Reissue', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 2, minLength: 2, maxLength: 2, dataType: 'ID', codeSets: ['00', '18'] },
         { id: 'BHT03', name: 'Reference Identification', description: 'Submitter transaction identifier', type: 'element', required: false, maxUse: 1, status: 'optional', order: 3, minLength: 1, maxLength: 50, dataType: 'AN' },
         { id: 'BHT04', name: 'Date', description: 'Transaction creation date CCYYMMDD', type: 'element', required: false, maxUse: 1, status: 'optional', order: 4, minLength: 8, maxLength: 8, dataType: 'DT' },
         { id: 'BHT05', name: 'Time', description: 'Transaction creation time HHMM', type: 'element', required: false, maxUse: 1, status: 'optional', order: 5, minLength: 4, maxLength: 8, dataType: 'TM' },
-        { id: 'BHT06', name: 'Transaction Type Code', description: 'RQ=Request, RS=Response', type: 'element', required: false, maxUse: 1, status: 'optional', order: 6, minLength: 2, maxLength: 2, dataType: 'ID' }
+        { id: 'BHT06', name: 'Transaction Type Code', description: 'RQ=Request, RS=Response', type: 'element', required: false, maxUse: 1, status: 'optional', order: 6, minLength: 2, maxLength: 2, dataType: 'ID', codeSets: ['RQ', 'RS'] }
       ]
     },
     {
@@ -148,11 +139,12 @@ const SchemaMapper: React.FC<SchemaMapperProps> = ({ onSchemaGenerated }) => {
           maxUse: 1,
           status: 'mandatory',
           order: 1,
+          position: '0100',
           children: [
             { id: 'HL01_2000A', name: 'Hierarchical ID Number', description: 'Unique hierarchical ID', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 1, maxLength: 12, dataType: 'AN' },
             { id: 'HL02_2000A', name: 'Hierarchical Parent ID Number', description: 'Parent hierarchical ID', type: 'element', required: false, maxUse: 1, status: 'optional', order: 2, minLength: 1, maxLength: 12, dataType: 'AN' },
-            { id: 'HL03_2000A', name: 'Hierarchical Level Code', description: '20=Information Source', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 3, minLength: 1, maxLength: 2, dataType: 'ID' },
-            { id: 'HL04_2000A', name: 'Hierarchical Child Code', description: '0=No Child, 1=Child Exists', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 4, minLength: 1, maxLength: 1, dataType: 'ID' }
+            { id: 'HL03_2000A', name: 'Hierarchical Level Code', description: '20=Information Source', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 3, minLength: 1, maxLength: 2, dataType: 'ID', codeSets: ['20'] },
+            { id: 'HL04_2000A', name: 'Hierarchical Child Code', description: '0=No Child, 1=Child Exists', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 4, minLength: 1, maxLength: 1, dataType: 'ID', codeSets: ['0', '1'] }
           ]
         },
         {
@@ -164,11 +156,12 @@ const SchemaMapper: React.FC<SchemaMapperProps> = ({ onSchemaGenerated }) => {
           maxUse: 1,
           status: 'mandatory',
           order: 2,
+          position: '1000',
           children: [
-            { id: 'NM101_2000A', name: 'Entity Identifier Code', description: 'X3=UMO', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 2, maxLength: 3, dataType: 'ID' },
-            { id: 'NM102_2000A', name: 'Entity Type Qualifier', description: '2=Non-Person Entity', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 2, minLength: 1, maxLength: 1, dataType: 'ID' },
+            { id: 'NM101_2000A', name: 'Entity Identifier Code', description: 'X3=UMO', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 2, maxLength: 3, dataType: 'ID', codeSets: ['X3'] },
+            { id: 'NM102_2000A', name: 'Entity Type Qualifier', description: '2=Non-Person Entity', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 2, minLength: 1, maxLength: 1, dataType: 'ID', codeSets: ['2'] },
             { id: 'NM103_2000A', name: 'Name Last or Organization Name', description: 'UMO organization name', type: 'element', required: false, maxUse: 1, status: 'optional', order: 3, minLength: 1, maxLength: 60, dataType: 'AN' },
-            { id: 'NM108_2000A', name: 'Identification Code Qualifier', description: 'PI=Payor Identification', type: 'element', required: false, maxUse: 1, status: 'optional', order: 8, minLength: 1, maxLength: 2, dataType: 'ID' },
+            { id: 'NM108_2000A', name: 'Identification Code Qualifier', description: 'PI=Payor Identification', type: 'element', required: false, maxUse: 1, status: 'optional', order: 8, minLength: 1, maxLength: 2, dataType: 'ID', codeSets: ['PI'] },
             { id: 'NM109_2000A', name: 'Identification Code', description: 'UMO identifier', type: 'element', required: false, maxUse: 1, status: 'optional', order: 9, minLength: 2, maxLength: 80, dataType: 'AN' }
           ]
         }
@@ -193,11 +186,12 @@ const SchemaMapper: React.FC<SchemaMapperProps> = ({ onSchemaGenerated }) => {
           maxUse: 1,
           status: 'mandatory',
           order: 1,
+          position: '0100',
           children: [
             { id: 'HL01_2000B', name: 'Hierarchical ID Number', description: 'Unique hierarchical ID', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 1, maxLength: 12, dataType: 'AN' },
             { id: 'HL02_2000B', name: 'Hierarchical Parent ID Number', description: 'Parent hierarchical ID', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 2, minLength: 1, maxLength: 12, dataType: 'AN' },
-            { id: 'HL03_2000B', name: 'Hierarchical Level Code', description: '21=Information Receiver', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 3, minLength: 1, maxLength: 2, dataType: 'ID' },
-            { id: 'HL04_2000B', name: 'Hierarchical Child Code', description: '0=No Child, 1=Child Exists', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 4, minLength: 1, maxLength: 1, dataType: 'ID' }
+            { id: 'HL03_2000B', name: 'Hierarchical Level Code', description: '21=Information Receiver', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 3, minLength: 1, maxLength: 2, dataType: 'ID', codeSets: ['21'] },
+            { id: 'HL04_2000B', name: 'Hierarchical Child Code', description: '0=No Child, 1=Child Exists', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 4, minLength: 1, maxLength: 1, dataType: 'ID', codeSets: ['0', '1'] }
           ]
         },
         {
@@ -209,34 +203,65 @@ const SchemaMapper: React.FC<SchemaMapperProps> = ({ onSchemaGenerated }) => {
           maxUse: 1,
           status: 'mandatory',
           order: 2,
+          position: '1000',
           children: [
-            { id: 'NM101_2000B', name: 'Entity Identifier Code', description: '1P=Provider', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 2, maxLength: 3, dataType: 'ID' },
-            { id: 'NM102_2000B', name: 'Entity Type Qualifier', description: '1=Person, 2=Non-Person', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 2, minLength: 1, maxLength: 1, dataType: 'ID' },
+            { id: 'NM101_2000B', name: 'Entity Identifier Code', description: '1P=Provider', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 2, maxLength: 3, dataType: 'ID', codeSets: ['1P'] },
+            { id: 'NM102_2000B', name: 'Entity Type Qualifier', description: '1=Person, 2=Non-Person', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 2, minLength: 1, maxLength: 1, dataType: 'ID', codeSets: ['1', '2'] },
             { id: 'NM103_2000B', name: 'Name Last or Organization Name', description: 'Provider last name or organization', type: 'element', required: false, maxUse: 1, status: 'optional', order: 3, minLength: 1, maxLength: 60, dataType: 'AN' },
             { id: 'NM104_2000B', name: 'Name First', description: 'Provider first name', type: 'element', required: false, maxUse: 1, status: 'optional', order: 4, minLength: 1, maxLength: 35, dataType: 'AN' },
             { id: 'NM105_2000B', name: 'Name Middle', description: 'Provider middle name', type: 'element', required: false, maxUse: 1, status: 'optional', order: 5, minLength: 1, maxLength: 25, dataType: 'AN' },
-            { id: 'NM108_2000B', name: 'Identification Code Qualifier', description: 'XX=NPI', type: 'element', required: false, maxUse: 1, status: 'optional', order: 8, minLength: 1, maxLength: 2, dataType: 'ID' },
+            { id: 'NM108_2000B', name: 'Identification Code Qualifier', description: 'XX=NPI', type: 'element', required: false, maxUse: 1, status: 'optional', order: 8, minLength: 1, maxLength: 2, dataType: 'ID', codeSets: ['XX'] },
             { id: 'NM109_2000B', name: 'Identification Code', description: 'Provider NPI', type: 'element', required: false, maxUse: 1, status: 'optional', order: 9, minLength: 2, maxLength: 80, dataType: 'AN' }
+          ]
+        },
+        {
+          id: 'N3_2000B',
+          name: 'N3 - Address Information',
+          description: 'Provider address line information',
+          type: 'segment',
+          required: false,
+          maxUse: 1,
+          status: 'optional',
+          order: 3,
+          position: '2000',
+          children: [
+            { id: 'N301_2000B', name: 'Address Information', description: 'Address line 1', type: 'element', required: true, maxUse: 1, status: 'mandatory', order: 1, minLength: 1, maxLength: 55, dataType: 'AN' },
+            { id: 'N302_2000B', name: 'Address Information', description: 'Address line 2', type: 'element', required: false, maxUse: 1, status: 'optional', order: 2, minLength: 1, maxLength: 55, dataType: 'AN' }
+          ]
+        },
+        {
+          id: 'N4_2000B',
+          name: 'N4 - Geographic Location',
+          description: 'Provider city, state, ZIP code information',
+          type: 'segment',
+          required: false,
+          maxUse: 1,
+          status: 'optional',
+          order: 4,
+          position: '2100',
+          children: [
+            { id: 'N401_2000B', name: 'City Name', description: 'Provider city', type: 'element', required: false, maxUse: 1, status: 'optional', order: 1, minLength: 2, maxLength: 30, dataType: 'AN' },
+            { id: 'N402_2000B', name: 'State or Province Code', description: 'Provider state', type: 'element', required: false, maxUse: 1, status: 'optional', order: 2, minLength: 2, maxLength: 2, dataType: 'ID' },
+            { id: 'N403_2000B', name: 'Postal Code', description: 'Provider ZIP code', type: 'element', required: false, maxUse: 1, status: 'optional', order: 3, minLength: 3, maxLength: 15, dataType: 'ID' },
+            { id: 'N404_2000B', name: 'Country Code', description: 'Provider country', type: 'element', required: false, maxUse: 1, status: 'optional', order: 4, minLength: 2, maxLength: 3, dataType: 'ID' }
           ]
         }
       ]
     }
   ];
 
-  const handleTransactionChange = (value: string) => {
-    setSelectedTransaction(value);
-    if (value === '278') {
+  useEffect(() => {
+    if (selectedTransaction === '278') {
       setDefaultSchema([...comprehensive278Schema]);
       setCustomSchema([...comprehensive278Schema]);
       setExpandedNodes(new Set(['ISA', 'GS', 'ST', 'BHT', 'LOOP_2000A', 'LOOP_2000B']));
     } else {
-      // For other transaction types, provide basic structure
-      const basicSchema = comprehensive278Schema.slice(0, 4); // ISA, GS, ST, BHT
+      const basicSchema = comprehensive278Schema.slice(0, 4);
       setDefaultSchema([...basicSchema]);
       setCustomSchema([...basicSchema]);
       setExpandedNodes(new Set(['ISA', 'GS', 'ST', 'BHT']));
     }
-  };
+  }, [selectedTransaction]);
 
   const toggleNode = (nodeId: string) => {
     const newExpanded = new Set(expandedNodes);
@@ -320,27 +345,77 @@ const SchemaMapper: React.FC<SchemaMapperProps> = ({ onSchemaGenerated }) => {
     setCustomSchema(prev => moveInArray(updateElement(prev)));
   };
 
-  const generateCustomSchema = () => {
-    if (!selectedTransaction || !selectedVersion) {
-      toast({
-        title: "Missing Selection",
-        description: "Please select both transaction type and version",
-        variant: "destructive"
-      });
-      return;
-    }
-
+  const generateCustomSchemaYAML = () => {
     const now = new Date();
-    const timestamp = now.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    }) + ' • ' + now.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      hour12: true 
-    });
+    const { timestamp } = getImplementationGuideInfo();
 
+    const yamlContent = `# Custom ESL Schema Overlay for X12N ${selectedTransaction} Request
+# ASC X12N ${selectedVersion} - CMS esMD X12N ${selectedTransaction} Companion Guide AR2024.10.0
+# Generated: ${timestamp}
+
+form: HIPAA
+version: '${selectedVersion}'
+imports: ['/x12/${selectedVersion}/basedefs.esl']
+
+structures:
+  - idRef: '${selectedTransaction}'
+    name: 'Health Care Services Review Request (Custom Overlay)'
+    purpose: 'Prior Authorization Request - Custom Configuration'
+    
+    heading:
+      - { idRef: 'BHT', position: '0200', usage: M, maxUse: 1,
+          elements: [
+            { position: 1, usage: M, name: 'Hierarchical Structure Code' },
+            { position: 2, usage: M, name: 'Transaction Set Purpose Code' },
+            { position: 3, usage: ${customSchema.find(e => e.id === 'BHT')?.children?.find(c => c.id === 'BHT03')?.status === 'mandatory' ? 'M' : 'O'}, name: 'Reference Identification' },
+            { position: 4, usage: ${customSchema.find(e => e.id === 'BHT')?.children?.find(c => c.id === 'BHT04')?.status === 'mandatory' ? 'M' : 'O'}, name: 'Date' },
+            { position: 5, usage: ${customSchema.find(e => e.id === 'BHT')?.children?.find(c => c.id === 'BHT05')?.status === 'mandatory' ? 'M' : 'O'}, name: 'Time' },
+            { position: 6, usage: ${customSchema.find(e => e.id === 'BHT')?.children?.find(c => c.id === 'BHT06')?.status === 'mandatory' ? 'M' : 'O'}, name: 'Transaction Type Code' }
+          ]
+        }
+    
+    detail:
+      - groupIdRef: '2000A_Loop'
+        name: 'Utilization Management Organization Level'
+        usage: M
+        maxUse: 1
+        items:
+          - { idRef: 'HL', position: '0100', usage: M }
+          - { idRef: 'NM1', position: '1000', usage: M }
+      
+      - groupIdRef: '2000B_Loop'
+        name: 'Information Source Level'
+        usage: M
+        maxUse: 1
+        items:
+          - { idRef: 'HL', position: '0100', usage: M }
+          - { idRef: 'NM1', position: '1000', usage: M }
+          - { idRef: 'N3', position: '2000', usage: ${customSchema.find(e => e.id === 'LOOP_2000B')?.children?.find(c => c.id === 'N3_2000B')?.status === 'mandatory' ? 'M' : customSchema.find(e => e.id === 'LOOP_2000B')?.children?.find(c => c.id === 'N3_2000B')?.status === 'removed' ? 'U' : 'O'} }
+          - { idRef: 'N4', position: '2100', usage: ${customSchema.find(e => e.id === 'LOOP_2000B')?.children?.find(c => c.id === 'N4_2000B')?.status === 'mandatory' ? 'M' : customSchema.find(e => e.id === 'LOOP_2000B')?.children?.find(c => c.id === 'N4_2000B')?.status === 'removed' ? 'U' : 'O'} }
+          - { idRef: 'PER', position: '3000', usage: O }
+
+# Custom overlay modifications applied:
+# - All HL segments: Mandatory
+# - BHT elements 3,4,5: ${customSchema.find(e => e.id === 'BHT')?.children?.find(c => c.id === 'BHT03')?.status === 'mandatory' ? 'Mandatory' : 'Optional'}
+# - N3 & N4 in 2010B Loop: ${customSchema.find(e => e.id === 'LOOP_2000B')?.children?.find(c => c.id === 'N3_2000B')?.status === 'mandatory' ? 'Mandatory' : 'Optional'}
+# - Generated with ${customSchema.length} total elements
+# - Modified elements: ${customSchema.filter(e => e.status !== 'optional').length}
+
+metadata:
+  totalElements: ${customSchema.length}
+  mandatoryElements: ${customSchema.filter(e => e.status === 'mandatory').length}
+  optionalElements: ${customSchema.filter(e => e.status === 'optional').length}
+  removedElements: ${customSchema.filter(e => e.status === 'removed').length}
+  generatedAt: "${now.toISOString()}"
+  transaction: "${selectedTransaction} ${selectedVersion}"
+  implementationGuide: "CMS esMD X12N ${selectedTransaction} Companion Guide AR2024.10.0"
+`;
+
+    return yamlContent;
+  };
+
+  const generateCustomSchema = () => {
+    const now = new Date();
     const customSchemaData: CustomSchema = {
       transactionType: selectedTransaction,
       version: selectedVersion,
@@ -348,68 +423,21 @@ const SchemaMapper: React.FC<SchemaMapperProps> = ({ onSchemaGenerated }) => {
       generatedAt: now
     };
 
-    // Add metadata for display
-    const schemaWithMetadata = {
-      ...customSchemaData,
-      metadata: {
-        generatedTimestamp: timestamp,
-        totalElements: customSchema.length,
-        mandatoryElements: customSchema.filter(e => e.status === 'mandatory').length,
-        optionalElements: customSchema.filter(e => e.status === 'optional').length,
-        removedElements: customSchema.filter(e => e.status === 'removed').length
-      }
-    };
-
     onSchemaGenerated(customSchemaData);
     
     toast({
       title: "Custom Schema Generated",
-      description: `Schema for ${selectedTransaction} ${selectedVersion} created at ${timestamp}`,
+      description: `Schema for ${selectedTransaction} ${selectedVersion} created with ${customSchema.length} elements`,
     });
   };
 
   const downloadSchemaAsYAML = () => {
-    const now = new Date();
-    const timestamp = now.toISOString();
-    
-    const yamlContent = `# Custom EDI X12N Schema
-# Generated: ${timestamp}
-# Transaction: ${selectedTransaction} ${selectedVersion}
-
-schema:
-  transactionType: "${selectedTransaction}"
-  version: "${selectedVersion}"
-  generatedAt: "${timestamp}"
-  
-  metadata:
-    totalElements: ${customSchema.length}
-    mandatoryElements: ${customSchema.filter(e => e.status === 'mandatory').length}
-    optionalElements: ${customSchema.filter(e => e.status === 'optional').length}
-    removedElements: ${customSchema.filter(e => e.status === 'removed').length}
-  
-  elements:
-${customSchema.map(element => `  - id: "${element.id}"
-    name: "${element.name}"
-    type: "${element.type}"
-    status: "${element.status}"
-    required: ${element.required}
-    maxUse: ${element.maxUse}
-    order: ${element.order}${element.children ? `
-    children:
-${element.children.map(child => `      - id: "${child.id}"
-        name: "${child.name}"
-        type: "${child.type}"
-        status: "${child.status}"
-        dataType: "${child.dataType || 'AN'}"
-        minLength: ${child.minLength || 1}
-        maxLength: ${child.maxLength || 80}`).join('\n')}` : ''}`).join('\n')}
-`;
-
+    const yamlContent = generateCustomSchemaYAML();
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${selectedTransaction}_${selectedVersion}_schema.yaml`;
+    a.download = `${selectedTransaction}RQ_custom_edits_v2024.esl`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -417,7 +445,7 @@ ${element.children.map(child => `      - id: "${child.id}"
 
     toast({
       title: "Schema Downloaded",
-      description: "Custom schema saved as YAML file",
+      description: "Custom ESL schema overlay saved successfully",
     });
   };
 
@@ -482,6 +510,11 @@ ${element.children.map(child => `      - id: "${child.id}"
             {element.dataType && element.type === 'element' && (
               <div className="text-xs text-gray-400">
                 {element.dataType} ({element.minLength}-{element.maxLength})
+              </div>
+            )}
+            {element.codeSets && element.codeSets.length > 0 && (
+              <div className="text-xs text-gray-400 mt-1">
+                Codes: {element.codeSets.join(', ')}
               </div>
             )}
           </div>
@@ -553,128 +586,89 @@ ${element.children.map(child => `      - id: "${child.id}"
           </CardTitle>
           <CardDescription className="text-center">
             Professional EDI X12N schema customization with granular loop, segment, and element control
+            <br />
+            Transaction: {selectedTransaction} {selectedVersion} • CMS esMD X12N {selectedTransaction} Companion Guide AR2024.10.0
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-6">
-            {/* Configuration Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">HIPAA Transaction Type</label>
-                <Select value={selectedTransaction} onValueChange={handleTransactionChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select transaction type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {transactionTypes.map(type => (
-                      <SelectItem key={type.value} value={type.value}>
-                        {type.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Implementation Version</label>
-                <Select value={selectedVersion} onValueChange={setSelectedVersion}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select version" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {versions.map(version => (
-                      <SelectItem key={version.value} value={version.value}>
-                        {version.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
             {/* Dual Pane Schema Editor */}
-            {defaultSchema.length > 0 && (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Left Pane - Default Schema */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-center text-lg">Default Schema Structure</CardTitle>
-                    <CardDescription className="text-center">
-                      Standard {selectedTransaction} {selectedVersion} elements
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Pane - Default Schema */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-center text-lg">Default Schema Structure</CardTitle>
+                  <CardDescription className="text-center">
+                    Standard {selectedTransaction} {selectedVersion} elements
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="border rounded-lg max-h-96 overflow-y-auto">
+                    <div className="space-y-1 p-2">
+                      {defaultSchema.map(element => renderSchemaElement(element, 0, false))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Right Pane - Custom Schema Builder */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-center text-lg">Custom Schema Builder</CardTitle>
+                  <CardDescription className="text-center">
+                    Configure, customize, and generate your schema overlay
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {/* Bulk Controls */}
+                    {selectedElements.size > 0 && (
+                      <div className="flex items-center gap-2 p-2 bg-blue-50 rounded border">
+                        <span className="text-sm font-medium">
+                          {selectedElements.size} selected
+                        </span>
+                        <div className="flex gap-1">
+                          <Button size="sm" onClick={() => bulkUpdateStatus('mandatory')}>
+                            Mandatory
+                          </Button>
+                          <Button size="sm" onClick={() => bulkUpdateStatus('optional')}>
+                            Optional
+                          </Button>
+                          <Button size="sm" variant="destructive" onClick={removeSelectedElements}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="border rounded-lg max-h-96 overflow-y-auto">
                       <div className="space-y-1 p-2">
-                        {defaultSchema.map(element => renderSchemaElement(element, 0, false))}
+                        {customSchema.map(element => renderSchemaElement(element, 0, true))}
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-
-                {/* Right Pane - Custom Schema Builder */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-center text-lg">Custom Schema Builder</CardTitle>
-                    <CardDescription className="text-center">
-                      Configure, customize, and generate your schema overlay
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {/* Bulk Controls */}
-                      {selectedElements.size > 0 && (
-                        <div className="flex items-center gap-2 p-2 bg-blue-50 rounded border">
-                          <span className="text-sm font-medium">
-                            {selectedElements.size} selected
-                          </span>
-                          <div className="flex gap-1">
-                            <Button size="sm" onClick={() => bulkUpdateStatus('mandatory')}>
-                              Mandatory
-                            </Button>
-                            <Button size="sm" onClick={() => bulkUpdateStatus('optional')}>
-                              Optional
-                            </Button>
-                            <Button size="sm" variant="destructive" onClick={removeSelectedElements}>
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="border rounded-lg max-h-96 overflow-y-auto">
-                        <div className="space-y-1 p-2">
-                          {customSchema.map(element => renderSchemaElement(element, 0, true))}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
             {/* Generation Controls */}
-            {customSchema.length > 0 && (
-              <div className="flex justify-center gap-2">
-                <Button 
-                  onClick={generateCustomSchema}
-                  disabled={!selectedTransaction || !selectedVersion}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <FileCode className="w-4 h-4 mr-2" />
-                  Generate Custom Schema
-                </Button>
-                
-                <Button 
-                  onClick={downloadSchemaAsYAML}
-                  variant="outline"
-                  disabled={!selectedTransaction || !selectedVersion}
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Download YAML
-                </Button>
-              </div>
-            )}
+            <div className="flex justify-center gap-2">
+              <Button 
+                onClick={generateCustomSchema}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <FileCode className="w-4 h-4 mr-2" />
+                Generate Custom Schema
+              </Button>
+              
+              <Button 
+                onClick={downloadSchemaAsYAML}
+                variant="outline"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Download YAML
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

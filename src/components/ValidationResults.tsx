@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { Hexagon, FileText, CheckCircle } from 'lucide-react';
-import { ParsedEDI, ValidationResult, CustomSchema } from '@/pages/Index';
-import { mockValidateEDI } from '@/utils/mockApi';
+import { ParsedEDI, ValidationResult, CustomSchema, EDIFile } from '@/pages/Index';
+import { mockValidateEDI, mockParseEDI } from '@/utils/mockApi';
+import { validateWithESLOverlay } from '@/utils/eslValidator';
 import { useToast } from '@/hooks/use-toast';
 
 interface ValidationResultsProps {
@@ -12,25 +15,71 @@ interface ValidationResultsProps {
   validationResults: ValidationResult[];
   onValidationComplete: (results: ValidationResult[]) => void;
   customSchema?: CustomSchema | null;
+  currentFile?: EDIFile | null;
+  onFileParsed?: (data: ParsedEDI) => void;
 }
 
 const ValidationResults: React.FC<ValidationResultsProps> = ({
   parsedData,
   validationResults,
   onValidationComplete,
-  customSchema
+  customSchema,
+  currentFile,
+  onFileParsed
 }) => {
   const [isValidating, setIsValidating] = useState(false);
+  const [useCustomSchema, setUseCustomSchema] = useState(false);
   const [filter, setFilter] = useState<'all' | 'error' | 'warning' | 'info'>('all');
+  const [autoValidationRun, setAutoValidationRun] = useState(false);
   const { toast } = useToast();
+
+  // Auto-run default validation when file is uploaded
+  useEffect(() => {
+    const runAutoValidation = async () => {
+      if (currentFile && !autoValidationRun && !parsedData) {
+        setIsValidating(true);
+        try {
+          // First parse the file
+          const parsed = await mockParseEDI(currentFile);
+          onFileParsed?.(parsed);
+          
+          // Then run default validation
+          const results = await mockValidateEDI(parsed, false);
+          onValidationComplete(results);
+          setAutoValidationRun(true);
+          
+          toast({
+            title: "Automatic validation complete",
+            description: `ANSI X12 default schema validation completed`,
+          });
+        } catch (error) {
+          toast({
+            title: "Auto-validation failed",
+            description: "Unable to automatically validate the EDI file",
+            variant: "destructive"
+          });
+        } finally {
+          setIsValidating(false);
+        }
+      }
+    };
+
+    runAutoValidation();
+  }, [currentFile, autoValidationRun, parsedData, onFileParsed, onValidationComplete, toast]);
 
   const handleValidation = async () => {
     if (!parsedData) return;
 
     setIsValidating(true);
     try {
-      // Use custom schema if available
-      const results = await mockValidateEDI(parsedData, !!customSchema);
+      let results: ValidationResult[];
+      
+      if (useCustomSchema && customSchema) {
+        results = await validateWithESLOverlay(parsedData, true);
+      } else {
+        results = await mockValidateEDI(parsedData, false);
+      }
+      
       onValidationComplete(results);
       
       const errorCount = results.filter(r => r.type === 'error').length;
@@ -38,7 +87,7 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
       
       toast({
         title: "Validation complete",
-        description: `Found ${errorCount} error(s) and ${warningCount} warning(s)${customSchema ? ' using custom ESL overlay' : ''}`,
+        description: `Found ${errorCount} error(s) and ${warningCount} warning(s)${useCustomSchema && customSchema ? ' using custom ESL overlay' : ' using default schema'}`,
       });
     } catch (error) {
       toast({
@@ -77,9 +126,34 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
     return levels.find(l => l.level === level) || levels[0];
   };
 
+  const calculateComplianceScore = () => {
+    if (validationResults.length === 0) return 100;
+    const errorCount = validationResults.filter(r => r.type === 'error').length;
+    const warningCount = validationResults.filter(r => r.type === 'warning').length;
+    return Math.max(0, 100 - (errorCount * 15) - (warningCount * 5));
+  };
+
   const errorCount = validationResults.filter(r => r.type === 'error').length;
   const warningCount = validationResults.filter(r => r.type === 'warning').length;
   const infoCount = validationResults.filter(r => r.type === 'info').length;
+  const complianceScore = calculateComplianceScore();
+
+  // Generate SNIP Level summary
+  const snipLevels = [1, 2, 3, 4, 5, 6, 7].map(level => {
+    const levelResults = validationResults.filter(r => r.level === level);
+    const levelErrors = levelResults.filter(r => r.type === 'error').length;
+    const snipInfo = getSNIPLevel(level);
+    
+    return {
+      level,
+      name: snipInfo.name,
+      description: snipInfo.description,
+      passed: levelErrors === 0,
+      errorCount: levelErrors,
+      warningCount: levelResults.filter(r => r.type === 'warning').length,
+      infoCount: levelResults.filter(r => r.type === 'info').length
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -93,33 +167,58 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
             Comprehensive validation using CMS esMD X12N 278 Companion Guide AR2024.10.0
             {customSchema && (
               <span className="block mt-2 text-blue-600 font-medium">
-                Using custom ESL overlay: {customSchema.transactionType} {customSchema.version}
+                Custom schema available: {customSchema.transactionType} {customSchema.version}
               </span>
             )}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!parsedData ? (
+          {!currentFile ? (
             <div className="text-center py-8 text-gray-500">
               <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>No parsed data available. Please parse an EDI file first.</p>
+              <p>No file available for validation. Please upload an EDI file first.</p>
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Auto-validation status */}
+              {autoValidationRun && (
+                <div className="flex items-center justify-center gap-2 p-3 bg-green-50 border border-green-200 rounded">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <span className="text-green-700 font-medium">
+                    Automatic ANSI X12 default schema validation completed
+                  </span>
+                </div>
+              )}
+
+              {/* Custom Schema Toggle */}
+              {customSchema && (
+                <div className="flex items-center justify-center gap-4 p-4 bg-blue-50 border border-blue-200 rounded">
+                  <span className="text-sm font-medium">Validate with Custom Schema</span>
+                  <Switch
+                    checked={useCustomSchema}
+                    onCheckedChange={setUseCustomSchema}
+                  />
+                  <span className="text-xs text-blue-600">
+                    {useCustomSchema ? 'Using custom ESL overlay' : 'Using default schema'}
+                  </span>
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <div className="text-center flex-1">
-                  <p className="font-medium">Ready for validation</p>
+                  <p className="font-medium">
+                    {parsedData ? 'Ready for validation' : 'Processing file...'}
+                  </p>
                   <p className="text-sm text-gray-600">
-                    {parsedData.transactionCount} transaction(s) to validate
-                    {customSchema && <span className="text-blue-600"> with custom ESL overlay</span>}
+                    {parsedData ? `${parsedData.transactionCount} transaction(s) processed` : 'Parsing EDI structure...'}
                   </p>
                 </div>
                 <Button 
                   onClick={handleValidation}
-                  disabled={isValidating}
+                  disabled={isValidating || !parsedData}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
-                  {isValidating ? 'Validating...' : 'Run SNIP Validation'}
+                  {isValidating ? 'Validating...' : useCustomSchema ? 'Run Custom Validation' : 'Re-run Default Validation'}
                 </Button>
               </div>
               
@@ -128,19 +227,16 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
                   <div className="flex items-center gap-2 p-4 bg-blue-50 rounded">
                     <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                     <span className="text-blue-700">
-                      Running SNIP Level 1-7 validation with {customSchema ? 'custom ESL overlay' : 'default schema'}...
+                      Running SNIP Level 1-7 validation with {useCustomSchema && customSchema ? 'custom ESL overlay' : 'default schema'}...
                     </span>
                   </div>
                   <div className="grid grid-cols-7 gap-2">
-                    {[1, 2, 3, 4, 5, 6, 7].map(level => {
-                      const snipLevel = getSNIPLevel(level);
-                      return (
-                        <div key={level} className="text-center p-2 bg-gray-50 rounded">
-                          <div className="text-xs font-medium">Level {level}</div>
-                          <div className="text-xs text-gray-600">{snipLevel.name}</div>
-                        </div>
-                      );
-                    })}
+                    {snipLevels.map(snipLevel => (
+                      <div key={snipLevel.level} className="text-center p-2 bg-gray-50 rounded">
+                        <div className="text-xs font-medium">Level {snipLevel.level}</div>
+                        <div className="text-xs text-gray-600">{snipLevel.name}</div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -149,11 +245,56 @@ const ValidationResults: React.FC<ValidationResultsProps> = ({
         </CardContent>
       </Card>
 
+      {/* SNIP Level Summary */}
+      {validationResults.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-center">SNIP Level Compliance Summary</CardTitle>
+            <CardDescription className="text-center">
+              Overall Compliance Score: <span className={`font-bold text-lg ${complianceScore >= 90 ? 'text-green-600' : complianceScore >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
+                {complianceScore}%
+              </span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {snipLevels.map(snipLevel => (
+                <div key={snipLevel.level} className="flex items-center gap-4 p-3 border rounded">
+                  <div className="w-12 text-center">
+                    <div className="text-sm font-bold">L{snipLevel.level}</div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">{snipLevel.name}</div>
+                    <div className="text-xs text-gray-600">{snipLevel.description}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge className={`text-xs ${snipLevel.passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                      {snipLevel.passed ? 'PASS' : 'FAIL'}
+                    </Badge>
+                    {snipLevel.errorCount > 0 && (
+                      <Badge variant="outline" className="text-xs text-red-600">
+                        {snipLevel.errorCount} errors
+                      </Badge>
+                    )}
+                    {snipLevel.warningCount > 0 && (
+                      <Badge variant="outline" className="text-xs text-amber-600">
+                        {snipLevel.warningCount} warnings
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Detailed Results */}
       {validationResults.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-center flex items-center justify-center gap-4">
-              <span>Validation Results</span>
+              <span>Detailed Validation Results</span>
               <div className="flex gap-2">
                 <Badge variant="outline" className="bg-red-50 text-red-700">
                   {errorCount} Errors
