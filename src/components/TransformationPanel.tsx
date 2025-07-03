@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -359,7 +358,12 @@ const TransformationPanel: React.FC<TransformationPanelProps> = ({
       "meta": {
         "lastUpdated": new Date().toISOString(),
         "source": fixedEDIContent ? "fixed-edi-x12-278" : "edi-x12-278",
-        "profile": ["http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-pas-request-bundle"]
+        "profile": ["http://hl7.org/fhir/us/davinci-pas/StructureDefinition/profile-pas-request-bundle"],
+        "implementationGuide": "CMS esMD X12N 278 Companion Guide AR2024.10.0",
+        "processedAt": timestamp,
+        "originalFileName": currentFile.name,
+        "fixed": !!fixedEDIContent,
+        "x12ControlNumbers": parsedData.controlNumbers
       },
       "identifier": {
         "system": "urn:ietf:rfc:3986",
@@ -574,14 +578,7 @@ const TransformationPanel: React.FC<TransformationPanelProps> = ({
             ]
           }
         }
-      ],
-      "meta": {
-        "implementationGuide": "CMS esMD X12N 278 Companion Guide AR2024.10.0",
-        "processedAt": timestamp,
-        "originalFileName": currentFile.name,
-        "fixed": !!fixedEDIContent,
-        "x12ControlNumbers": parsedData.controlNumbers
-      }
+      ]
     }, null, 2);
   };
 
